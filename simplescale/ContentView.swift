@@ -126,9 +126,17 @@ class ScaleManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
     
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         DispatchQueue.main.async {
+            // Reset BLE state
             self.isConnected = false
             self.isConnecting = false
             self.weight = 0.0
+            
+            // Stop and reset timer
+            self.timer?.invalidate()
+            self.timer = nil
+            self.timerElapsed = 0
+            self.timerState = .idle
+            self.timerString = "0:00"
         }
     }
     
@@ -269,6 +277,9 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            UIApplication.shared.isIdleTimerDisabled = true
+        }
     }
     
     // Dynamic styling helpers based on state
