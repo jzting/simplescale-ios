@@ -20,7 +20,7 @@ class ScaleManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
     // Timer State
     enum TimerState { case idle, running, stopped }
     @Published var timerState: TimerState = .idle
-    @Published var timerString: String = "0:00"
+    @Published var timerString: String = "00:00"
     
     private var centralManager: CBCentralManager!
     private var peripheral: CBPeripheral?
@@ -80,7 +80,7 @@ class ScaleManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
             haptic(style: .heavy)
             timerElapsed = 0
             timerState = .idle
-            timerString = "0:00"
+            timerString = "00:00"
         }
     }
     
@@ -93,23 +93,20 @@ class ScaleManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
         let totalSeconds = Int(totalElapsed)
         let minutes = totalSeconds / 60
         let seconds = totalSeconds % 60
-        timerString = String(format: "%d:%02d", minutes, seconds)
+        timerString = String(format: "%02d:%02d", minutes, seconds)
     }
     
     // MARK: - CoreBluetooth Delegate Methods
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-            if central.state == .poweredOn {
-                // Automatically attempt to connect as soon as Bluetooth is ready
-                connect()
-            } else {
-                // Optional: Handle other states (e.g., .poweredOff, .unauthorized)
-                // by updating the UI so the user knows why it isn't connecting.
-                DispatchQueue.main.async {
-                    self.isConnected = false
-                    self.isConnecting = false
-                }
+        if central.state == .poweredOn {
+            connect()
+        } else {
+            DispatchQueue.main.async {
+                self.isConnected = false
+                self.isConnecting = false
             }
         }
+    }
     
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
         if let name = peripheral.name, name.hasPrefix("TIMEMORE") {
@@ -126,17 +123,15 @@ class ScaleManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
     
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         DispatchQueue.main.async {
-            // Reset BLE state
             self.isConnected = false
             self.isConnecting = false
             self.weight = 0.0
             
-            // Stop and reset timer
             self.timer?.invalidate()
             self.timer = nil
             self.timerElapsed = 0
             self.timerState = .idle
-            self.timerString = "0:00"
+            self.timerString = "00:00"
         }
     }
     
@@ -196,84 +191,85 @@ struct ContentView: View {
     let unitGray = Color(red: 0.16, green: 0.16, blue: 0.16)
     
     var body: some View {
-        ZStack {
-            bgDark.ignoresSafeArea()
+        GeometryReader { geometry in
+            let isLandscape = geometry.size.width > geometry.size.height
             
-            VStack {
-                Spacer()
+            ZStack {
+                bgDark.ignoresSafeArea()
                 
-                // Weight Display
-                VStack(spacing: 8) {
-                    Text("WEIGHT")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .kerning(2.0)
-                        .foregroundColor(.gray)
-                    
-                    HStack(alignment: .bottom, spacing: 6) {
-                        Text(String(format: "%.1f", manager.weight))
-                            .font(.system(size: 90, weight: .light, design: .monospaced))
-                            .foregroundColor(manager.weight < 0 ? .gray : .white)
-                            // Tabular nums to prevent shifting
-                            .monospacedDigit()
+                if isLandscape {
+                    // MARK: - Landscape Layout
+                    VStack {
+                        // 1. Displays (Two-Column Layout)
+                        HStack(spacing: 14) {
+                            // Timer Column
+                            VStack {
+                                Spacer()
+                                timerDisplay
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity)
+                            
+                            // Weight Column
+                            VStack {
+                                Spacer()
+                                weightDisplay
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
                         
-                        Text("g")
-                            .font(.system(size: 30, weight: .light, design: .monospaced))
-                            .foregroundColor(unitGray)
-                            .padding(.bottom, 15)
+                        // 2. Controls (Centered or Split)
+                        if !manager.isConnected {
+                            connectButton
+                            // Constrain the max width so it doesn't stretch across the entire landscape screen
+                                .frame(maxWidth: 400)
+                        } else {
+                            // Matches the top HStack spacing so the buttons align perfectly under their columns
+                            HStack(spacing: 14) {
+                                timerButton
+                                    .padding(.horizontal, 50)
+                                
+                                tareButton
+                                    .padding(.horizontal, 50)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 10)
+                    
+                } else {
+                    // MARK: - Portrait (Vertical Layout)
+                    VStack {
+                        Spacer()
+                        timerDisplay
+                        
+                        Spacer()
+                        
+                        // Thin dark gray separator line
+                        Rectangle()
+                            .fill(Color(white: 0.1))
+                            .frame(height: 1)
+                            .padding(.horizontal, 50)
+                        
+                        Spacer()
+                        
+                        weightDisplay
+                        Spacer()
+                        
+                        // Bottom Bar Controls
+                        HStack(spacing: 14) {
+                            if !manager.isConnected {
+                                connectButton
+                            } else {
+                                timerButton
+                                tareButton
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 10)
                     }
                 }
-                
-                Spacer()
-                
-                // Timer Display
-                VStack(spacing: 8) {
-                    Text("TIMER")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .kerning(2.0)
-                        .foregroundColor(.gray)
-                    
-                    Text(manager.timerString)
-                        .font(.system(size: 90, weight: .light, design: .monospaced))
-                        .monospacedDigit()
-                        .foregroundColor(timerColor)
-                }
-                
-                Spacer()
-                
-                // Bottom Bar Controls
-                HStack(spacing: 14) {
-                    if !manager.isConnected {
-                        Button(action: { manager.connect() }) {
-                            Text(manager.isConnecting ? "CONNECTING..." : "CONNECT")
-                        }
-                        .disabled(manager.isConnecting)
-                        .buttonStyle(ScaleButtonStyle(
-                            bg: Color(white: 0.1),
-                            fg: manager.isConnecting ? Color(white: 0.3) : Color(white: 0.5),
-                            borderColor: Color(white: 0.15)
-                        ))
-                    } else {
-                        Button(action: { manager.handleTimer() }) {
-                            Text(timerButtonText)
-                        }
-                        .buttonStyle(ScaleButtonStyle(
-                            bg: timerButtonBg,
-                            fg: timerButtonFg,
-                            borderColor: timerButtonBorder
-                        ))
-                        
-                        Button(action: { manager.tare() }) {
-                            Text("TARE")
-                        }
-                        .buttonStyle(ScaleButtonStyle(
-                            bg: Color(white: 0.1),
-                            fg: Color(white: 0.5),
-                            borderColor: Color(white: 0.15)
-                        ))
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 10)
             }
         }
         .preferredColorScheme(.dark)
@@ -281,8 +277,85 @@ struct ContentView: View {
             UIApplication.shared.isIdleTimerDisabled = true
         }
     }
+    // MARK: - Display Subviews
+    private var weightDisplay: some View {
+        VStack(spacing: 8) {
+            HStack(alignment: .bottom, spacing: 6) {
+                
+                // 1. Invisible placeholder to balance the HStack and center the weight
+                Text("g")
+                    .font(.system(size: 30, weight: .light, design: .monospaced))
+                    .padding(.bottom, 15)
+                    .hidden()
+                
+                // 2. The centered numerical weight
+                Text(String(format: "%.1f", manager.weight))
+                    .font(.system(size: 90, weight: .light, design: .monospaced))
+                    .foregroundColor(weightColor)
+                    .monospacedDigit()
+                
+                // 3. The actual visible unit
+                Text("g")
+                    .font(.system(size: 30, weight: .light, design: .monospaced))
+                    .foregroundColor(manager.isConnected ? unitGray : Color(white: 0.18))
+                    .padding(.bottom, 15)
+            }
+        }
+    }
     
-    // Dynamic styling helpers based on state
+    private var timerDisplay: some View {
+        VStack(spacing: 8) {
+            Text(manager.timerString)
+                .font(.system(size: 90, weight: .light, design: .monospaced))
+                .monospacedDigit()
+                .foregroundColor(timerColor)
+        }
+    }
+    
+    // MARK: - Button Subviews
+    private var connectButton: some View {
+        Button(action: { manager.connect() }) {
+            Text(manager.isConnecting ? "CONNECTING..." : "CONNECT")
+        }
+        .disabled(manager.isConnecting)
+        .buttonStyle(ScaleButtonStyle(
+            bg: Color(white: 0.1),
+            fg: manager.isConnecting ? Color(white: 0.3) : Color(white: 0.5),
+            borderColor: Color(white: 0.15)
+        ))
+    }
+    
+    private var timerButton: some View {
+        Button(action: { manager.handleTimer() }) {
+            Text(timerButtonText)
+        }
+        .buttonStyle(ScaleButtonStyle(
+            bg: timerButtonBg,
+            fg: timerButtonFg,
+            borderColor: timerButtonBorder
+        ))
+    }
+    
+    private var tareButton: some View {
+        Button(action: { manager.tare() }) {
+            Text("TARE")
+        }
+        .buttonStyle(ScaleButtonStyle(
+            bg: Color(white: 0.1),
+            fg: Color(white: 0.5),
+            borderColor: Color(white: 0.15)
+        ))
+    }
+    
+    // MARK: - Dynamic Styling Helpers
+    private var weightColor: Color {
+        // Return the idle timer color (0.18 white) if disconnected OR if weight is exactly 0
+        if !manager.isConnected || manager.weight == 0 {
+            return Color(white: 0.18)
+        }
+        return manager.weight < 0 ? .gray : .white
+    }
+    
     private var timerColor: Color {
         switch manager.timerState {
         case .idle: return Color(white: 0.18)
