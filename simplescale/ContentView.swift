@@ -17,6 +17,9 @@ class ScaleManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
     @Published var isConnecting = false
     @Published var weight: Double = 0.0
     
+    // Add this to handle the Tare flash
+    private var ignoreWeightUpdatesUntil: Date?
+    
     // Timer State
     enum TimerState { case idle, running, stopped }
     @Published var timerState: TimerState = .idle
@@ -54,6 +57,13 @@ class ScaleManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
     func tare() {
         haptic(style: .heavy)
         guard let peripheral = peripheral, let ctrlChar = ctrlChar else { return }
+        
+        // Optimistically set to 0.0 and ignore incoming BLE packets for 500ms
+        DispatchQueue.main.async {
+            self.weight = 0.0
+        }
+        self.ignoreWeightUpdatesUntil = Date().addingTimeInterval(0.5)
+        
         let data = Data(tareCommand)
         peripheral.writeValue(data, for: ctrlChar, type: .withoutResponse)
     }
@@ -169,6 +179,11 @@ class ScaleManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
             let parsedWeight = raw > 30000 ? Double(raw - 65536) * 0.1 : Double(raw) * 0.1
             
             DispatchQueue.main.async {
+                // If we recently tared, ignore in-flight packets
+                if let ignoreUntil = self.ignoreWeightUpdatesUntil, Date() < ignoreUntil {
+                    return
+                }
+                
                 self.weight = parsedWeight
             }
         }
@@ -273,6 +288,7 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .persistentSystemOverlays(.hidden) // <--- Hides the swipe-to-home indicator
         .onAppear {
             UIApplication.shared.isIdleTimerDisabled = true
         }
@@ -288,8 +304,8 @@ struct ContentView: View {
                     .padding(.bottom, 15)
                     .hidden()
                 
-                // 2. The centered numerical weight
-                Text(String(format: "%.1f", manager.weight))
+                // 2. The centered numerical weight (Using our new dynamic formatter)
+                Text(formattedWeightString)
                     .font(.system(size: 90, weight: .light, design: .monospaced))
                     .foregroundColor(weightColor)
                     .monospacedDigit()
@@ -353,7 +369,9 @@ struct ContentView: View {
         if !manager.isConnected || manager.weight == 0 {
             return Color(white: 0.18)
         }
-        return manager.weight < 0 ? .gray : .white
+        
+        // Return the "stop button" red color if weight is negative, otherwise white
+        return manager.weight < 0 ? Color(red: 1.0, green: 0.33, blue: 0.33) : .white
     }
     
     private var timerColor: Color {
@@ -394,6 +412,14 @@ struct ContentView: View {
         case .running: return Color(red: 0.22, green: 0.06, blue: 0.06)
         case .stopped: return Color(white: 0.16)
         }
+    }
+    
+    private var formattedWeightString: String {
+        let absoluteWeight = abs(manager.weight)
+        // If there's no decimal remainder, show 0 decimal places. Otherwise, show 1.
+        return absoluteWeight.truncatingRemainder(dividingBy: 1) == 0 ?
+        String(format: "%.0f", absoluteWeight) :
+        String(format: "%.1f", absoluteWeight)
     }
 }
 
