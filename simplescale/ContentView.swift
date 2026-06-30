@@ -49,7 +49,7 @@ class ScaleManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
     func connect() {
         guard centralManager.state == .poweredOn else { return }
         isConnecting = true
-        haptic(style: .medium)
+        haptic(style: .heavy)
         // Scan for all devices, we will filter by name "TIMEMORE"
         centralManager.scanForPeripherals(withServices: nil, options: nil)
     }
@@ -69,7 +69,7 @@ class ScaleManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
     }
     
     func handleTimer() {
-        haptic(style: .medium)
+        haptic(style: .heavy)
         
         switch timerState {
         case .idle:
