@@ -415,11 +415,8 @@ struct ContentView: View {
     }
     
     private var formattedWeightString: String {
-        let absoluteWeight = abs(manager.weight)
-        // If there's no decimal remainder, show 0 decimal places. Otherwise, show 1.
-        return absoluteWeight.truncatingRemainder(dividingBy: 1) == 0 ?
-        String(format: "%.0f", absoluteWeight) :
-        String(format: "%.1f", absoluteWeight)
+        let absoluteWeight = abs(manager.weight)        
+        return String(format: "%.1f", absoluteWeight)
     }
 }
 
